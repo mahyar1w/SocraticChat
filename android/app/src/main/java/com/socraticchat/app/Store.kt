@@ -43,6 +43,7 @@ object StateStore {
                 "config",
                 JSONObject().apply {
                     put("ggufPath", defaultModel)
+                    put("useGpu", true)
                     put("useTeacher", false)
                     put("teacherUrl", "")
                     put("teacherModel", "")

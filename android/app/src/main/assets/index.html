@@ -170,6 +170,18 @@
   }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .check-row { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  .seg {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    background: var(--surface-subtle); border: 1px solid var(--border);
+    border-radius: 10px; padding: 4px;
+  }
+  .seg button {
+    border: 1px solid transparent; background: transparent; color: var(--muted);
+    border-radius: 7px; font-weight: 550; min-height: 36px;
+  }
+  .seg button.active {
+    background: var(--surface); color: var(--ink); border-color: var(--border-strong); font-weight: 650;
+  }
 </style>
 </head>
 <body>
@@ -179,7 +191,7 @@
     <span class="brand">Socratic</span>
   </div>
   <div class="header-right">
-    <span class="status-pill"><span id="statusDot" class="dot"></span><span id="statusText">Loading…</span></span>
+    <span class="status-pill" id="statusPill" style="cursor:pointer"><span id="statusDot" class="dot"></span><span id="statusText">Loading…</span></span>
     <button id="settingsBtn">Settings</button>
   </div>
 </header>
@@ -219,6 +231,13 @@
     <input id="ggufPath" type="text" placeholder="Import Qwen3.5-0.8B-Socratic-Q8_0.gguf">
     <button id="importModelBtn" class="primary">Import GGUF Model from Phone</button>
   </div>
+  <div class="field">
+    <label>Compute Backend</label>
+    <div class="seg" role="radiogroup" aria-label="Compute Backend">
+      <button type="button" id="gpuModeBtn">GPU (Vulkan)</button>
+      <button type="button" id="cpuModeBtn">CPU Only</button>
+    </div>
+  </div>
   <label class="check-row">
     <input id="useTeacher" type="checkbox">
     <span>Two-Step Teacher (query a larger model first)</span>
@@ -248,7 +267,10 @@ const STARTERS = [
 ];
 
 let state = JSON.parse(AndroidBridge.loadState());
+if (typeof state.config.useGpu !== "boolean") state.config.useGpu = true;
 let engineStatus = "starting";
+let activeBackend = state.config.useGpu ? "GPU" : "CPU";
+let formUseGpu = state.config.useGpu;
 let errorBanner = null;
 let busyConvId = null;
 let copiedIdx = -1;
@@ -416,8 +438,13 @@ window.onNativeEvent = (raw) => {
   const evt = JSON.parse(raw);
   if (evt.type === "engine") {
     engineStatus = evt.payload.status;
+    if (evt.payload.backend) activeBackend = evt.payload.backend;
     statusDot.className = "dot" + (engineStatus === "ready" ? " ready" : engineStatus === "starting" ? "" : " error");
-    statusText.textContent = engineStatus === "ready" ? "Ready" : engineStatus === "starting" ? "Loading…" : "Setup";
+    statusText.textContent = engineStatus === "ready"
+      ? `Ready · ${activeBackend}`
+      : engineStatus === "starting"
+      ? `Loading ${activeBackend}…`
+      : "Setup";
     if (evt.payload.modelPath) {
       state.config.ggufPath = evt.payload.modelPath;
       document.getElementById("ggufPath").value = evt.payload.modelPath;
@@ -451,8 +478,14 @@ window.onNativeEvent = (raw) => {
 
 function openDrawer() { renderDrawer(); drawer.classList.add("open"); backdrop.classList.add("open"); }
 function closeDrawer() { drawer.classList.remove("open"); backdrop.classList.remove("open"); }
+function syncBackendButtons() {
+  document.getElementById("gpuModeBtn").className = formUseGpu ? "active" : "";
+  document.getElementById("cpuModeBtn").className = !formUseGpu ? "active" : "";
+}
 function openSettings() {
   document.getElementById("ggufPath").value = state.config.ggufPath || "";
+  formUseGpu = !!state.config.useGpu;
+  syncBackendButtons();
   document.getElementById("useTeacher").checked = !!state.config.useTeacher;
   document.getElementById("teacherUrl").value = state.config.teacherUrl || "";
   document.getElementById("teacherModel").value = state.config.teacherModel || "";
@@ -460,12 +493,16 @@ function openSettings() {
   settingsSheet.classList.add("open");
 }
 function saveSettingsFromForm() {
+  const prevPath = state.config.ggufPath || "";
+  const prevGpu = !!state.config.useGpu;
   state.config.ggufPath = document.getElementById("ggufPath").value.trim();
+  state.config.useGpu = formUseGpu;
   state.config.useTeacher = document.getElementById("useTeacher").checked;
   state.config.teacherUrl = document.getElementById("teacherUrl").value.trim();
   state.config.teacherModel = document.getElementById("teacherModel").value.trim();
   AndroidBridge.setTeacherKey(document.getElementById("teacherKey").value.trim());
   persist();
+  return prevPath !== state.config.ggufPath || prevGpu !== state.config.useGpu;
 }
 
 document.getElementById("menuBtn").onclick = openDrawer;
@@ -483,6 +520,9 @@ document.getElementById("themeBtn").onclick = () => {
   persist(); render();
 };
 document.getElementById("settingsBtn").onclick = openSettings;
+document.getElementById("statusPill").onclick = openSettings;
+document.getElementById("gpuModeBtn").onclick = () => { formUseGpu = true; syncBackendButtons(); };
+document.getElementById("cpuModeBtn").onclick = () => { formUseGpu = false; syncBackendButtons(); };
 document.getElementById("useTeacher").onchange = (e) => {
   document.getElementById("teacherFields").style.display = e.target.checked ? "flex" : "none";
 };
@@ -490,11 +530,14 @@ document.getElementById("importModelBtn").onclick = () => AndroidBridge.pickMode
 document.getElementById("reloadBtn").onclick = () => {
   saveSettingsFromForm();
   settingsSheet.classList.remove("open");
-  AndroidBridge.startEngine(state.config.ggufPath || "");
+  AndroidBridge.startEngine(state.config.ggufPath || "", !!state.config.useGpu);
 };
 document.getElementById("closeSettingsBtn").onclick = () => {
-  saveSettingsFromForm();
+  const engineChanged = saveSettingsFromForm();
   settingsSheet.classList.remove("open");
+  if (engineChanged) {
+    AndroidBridge.startEngine(state.config.ggufPath || "", !!state.config.useGpu);
+  }
 };
 
 inputEl.addEventListener("input", updateSendState);
@@ -506,7 +549,7 @@ sendBtn.onclick = () => {
 };
 
 render();
-AndroidBridge.startEngine(state.config.ggufPath || "");
+AndroidBridge.startEngine(state.config.ggufPath || "", !!state.config.useGpu);
 </script>
 </body>
 </html>

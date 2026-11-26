@@ -62,8 +62,15 @@ class MainActivity : Activity() {
         evalJs("window.onNativeEvent && window.onNativeEvent(${JSONObject.quote(wrapped.toString())});")
     }
 
-    private fun startEngineAsync(preferredPath: String) {
-        emitEvent("engine", JSONObject().put("status", "starting").put("detail", "Loading 0.8B model…"))
+    private fun startEngineAsync(preferredPath: String, useGpu: Boolean) {
+        val backendLabel = if (useGpu) "GPU" else "CPU"
+        emitEvent(
+            "engine",
+            JSONObject()
+                .put("status", "starting")
+                .put("backend", backendLabel)
+                .put("detail", "Loading 0.8B model on $backendLabel…"),
+        )
         io.execute {
             engine?.stop()
             engine = null
@@ -74,12 +81,13 @@ class MainActivity : Activity() {
                     "engine",
                     JSONObject()
                         .put("status", "missing_model")
+                        .put("backend", backendLabel)
                         .put("detail", "Import Qwen3.5-0.8B-Socratic-Q8_0.gguf in Settings to start."),
                 )
                 return@execute
             }
 
-            val res = LlamaEngine.start(this, modelFile)
+            val res = LlamaEngine.start(this, modelFile, useGpu)
             res.fold(
                 onSuccess = { eng ->
                     engine = eng
@@ -87,7 +95,8 @@ class MainActivity : Activity() {
                         "engine",
                         JSONObject()
                             .put("status", "ready")
-                            .put("detail", "Local engine ready")
+                            .put("backend", backendLabel)
+                            .put("detail", "Local engine ready ($backendLabel)")
                             .put("modelPath", modelFile.absolutePath),
                     )
                 },
@@ -96,6 +105,7 @@ class MainActivity : Activity() {
                         "engine",
                         JSONObject()
                             .put("status", "error")
+                            .put("backend", backendLabel)
                             .put("detail", err.message ?: "Failed to start llama-server"),
                     )
                 },
@@ -135,10 +145,12 @@ class MainActivity : Activity() {
                 }
 
                 val state = StateStore.loadJson(this)
-                state.optJSONObject("config")?.put("ggufPath", dst.absolutePath)
+                val cfg = state.optJSONObject("config")
+                cfg?.put("ggufPath", dst.absolutePath)
+                val useGpu = cfg?.optBoolean("useGpu", true) ?: true
                 StateStore.saveJson(this, state)
                 emitEvent("model_imported", JSONObject().put("path", dst.absolutePath))
-                startEngineAsync(dst.absolutePath)
+                startEngineAsync(dst.absolutePath, useGpu)
             } catch (e: Exception) {
                 emitEvent(
                     "engine",
@@ -171,8 +183,8 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface
-        fun startEngine(ggufPath: String) {
-            startEngineAsync(ggufPath)
+        fun startEngine(ggufPath: String, useGpu: Boolean) {
+            startEngineAsync(ggufPath, useGpu)
         }
 
         @JavascriptInterface

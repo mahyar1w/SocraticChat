@@ -38,7 +38,7 @@ class LlamaEngine(
             return candidates.firstOrNull { it.isFile && it.length() > 0L }
         }
 
-        fun start(context: Context, modelFile: File): Result<LlamaEngine> {
+        fun start(context: Context, modelFile: File, useGpu: Boolean): Result<LlamaEngine> {
             val libDir = File(context.applicationInfo.nativeLibraryDir)
             val serverBin = File(libDir, "libllama_server.so")
             if (!serverBin.isFile) {
@@ -49,7 +49,7 @@ class LlamaEngine(
             }
 
             val port = ServerSocket(0).use { it.localPort }
-            val pb = ProcessBuilder(
+            val cmd = mutableListOf(
                 serverBin.absolutePath,
                 "-m", modelFile.absolutePath,
                 "--host", "127.0.0.1",
@@ -59,6 +59,12 @@ class LlamaEngine(
                 "--reasoning", "off",
                 "--reasoning-budget", "0",
             )
+            if (useGpu) {
+                cmd.addAll(listOf("-ngl", "99"))
+            } else {
+                cmd.addAll(listOf("--device", "none", "-ngl", "0"))
+            }
+            val pb = ProcessBuilder(cmd)
             val env = pb.environment()
             val prevLd = env["LD_LIBRARY_PATH"].orEmpty()
             env["LD_LIBRARY_PATH"] = if (prevLd.isEmpty()) libDir.absolutePath else "${libDir.absolutePath}:$prevLd"
