@@ -36,6 +36,16 @@ The AppImage also supports CLI and benchmark subcommands:
 
 ---
 
+## Quick Start (Android APK — arm64-v8a CPU + Vulkan)
+
+The GitHub Release also includes an installable `SocraticChat-arm64-v8a.apk` bundling `llama-server` (CPU + Vulkan) for Android 9+ (`arm64-v8a`).
+
+1. Download and install `SocraticChat-arm64-v8a.apk` from [Releases](https://github.com/mahyar1w/SocraticChat/releases).
+2. Copy your trained `Qwen3.5-0.8B-Socratic-Q8_0.gguf` onto your phone (e.g., into `Downloads`).
+3. Open **Socratic Chat -> Settings -> Import GGUF Model from Phone** and pick the `.gguf` file. The app copies it into private app storage and starts the bundled `llama-server` automatically.
+
+---
+
 ## Where the Model & App State Are Stored on Your PC
 
 | Item | Default Location |

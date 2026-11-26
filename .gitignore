@@ -16,10 +16,15 @@ outputs/checkpoints/
 outputs/gguf_gguf/
 outputs/lora_adapter/
 
-# Android binaries & archives
+# Android binaries, builds & archives
 llama-cpp-android-*/
 *.tar.gz
 bench_results.json
+*.apk
+android/.gradle/
+android/build/
+android/app/build/
+android/app/src/main/jniLibs/
 
 # Rust build artifacts
 socratic-chat/target/
