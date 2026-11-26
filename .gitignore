@@ -1,0 +1,25 @@
+# Python & ML build artifacts
+.venv/
+__pycache__/
+*.pyc
+unsloth_compiled_cache/
+
+# Large model weights, checkpoints, and exports
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+Qwen3.5-0.8B/
+Qwen3.5-0.8B-Socratic/
+outputs/checkpoints/
+outputs/gguf_gguf/
+outputs/lora_adapter/
+
+# Android binaries & archives
+llama-cpp-android-*/
+*.tar.gz
+bench_results.json
+
+# Rust build artifacts
+socratic-chat/target/

@@ -1,0 +1,100 @@
+name: Build & Release AppImage
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-appimage:
+    name: Build All-in-One Linux AppImage (CPU + Vulkan)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository with llama.cpp submodule
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: socratic-chat
+
+      - name: Install build dependencies (Vulkan, CMake, egui)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config \
+            libvulkan-dev glslc libcurl4-openssl-dev \
+            libxkbcommon-dev libwayland-dev libgtk-3-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libgl1-mesa-dev \
+            file
+
+      - name: Build llama-server (CPU + Vulkan) from submodule
+        run: |
+          cmake -S llama.cpp -B llama.cpp/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_VULKAN=ON \
+            -DGGML_NATIVE=OFF \
+            -DLLAMA_BUILD_SERVER=ON \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_TOOLS=ON \
+            -DBUILD_SHARED_LIBS=ON
+          cmake --build llama.cpp/build --target llama-server -j"$(nproc)"
+
+      - name: Build socratic-chat (release)
+        working-directory: socratic-chat
+        run: |
+          cargo test -- --skip test_live_llama_cpp_roundtrip
+          cargo build --release
+
+      - name: Assemble SocraticChat.AppDir
+        run: |
+          mkdir -p SocraticChat.AppDir/usr/bin SocraticChat.AppDir/usr/lib
+          cp socratic-chat/target/release/socratic-chat SocraticChat.AppDir/usr/bin/
+          cp llama.cpp/build/bin/llama-server SocraticChat.AppDir/usr/bin/
+          cp -a llama.cpp/build/bin/lib*.so* SocraticChat.AppDir/usr/lib/ 2>/dev/null || true
+          find llama.cpp/build -maxdepth 4 -name 'lib*.so*' -exec cp -a {} SocraticChat.AppDir/usr/lib/ \;
+
+          cp packaging/socratic-chat.desktop SocraticChat.AppDir/
+          cp packaging/socratic-chat.svg SocraticChat.AppDir/
+
+          cat <<'EOF' > SocraticChat.AppDir/AppRun
+          #!/usr/bin/env bash
+          set -euo pipefail
+          HERE="$(dirname "$(readlink -f "$0")")"
+          export LD_LIBRARY_PATH="${HERE}/usr/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+          exec "${HERE}/usr/bin/socratic-chat" "$@"
+          EOF
+          chmod +x SocraticChat.AppDir/AppRun \
+            SocraticChat.AppDir/usr/bin/socratic-chat \
+            SocraticChat.AppDir/usr/bin/llama-server
+
+      - name: Package AppImage
+        run: |
+          curl -fSL -o appimagetool.AppImage \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool.AppImage
+          ARCH=x86_64 ./appimagetool.AppImage --appimage-extract-and-run \
+            SocraticChat.AppDir SocraticChat-x86_64.AppImage
+          ls -lh SocraticChat-x86_64.AppImage
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SocraticChat-x86_64.AppImage
+          path: SocraticChat-x86_64.AppImage
+
+      - name: Publish GitHub Release on tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: SocraticChat-x86_64.AppImage
+          generate_release_notes: true

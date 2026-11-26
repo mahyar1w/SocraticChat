@@ -1,0 +1,13 @@
+[project]
+name = "socratic"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "accelerate>=1.16.0",
+    "bitsandbytes>=0.50.2",
+    "datasets>=4.8.5",
+    "hf-transfer>=0.1.9",
+    "peft>=0.22.0",
+    "trl>=1.15.0",
+    "unsloth>=2026.11.10",
+]

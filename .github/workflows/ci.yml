@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  rust:
+    name: Rust tests & check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: socratic-chat
+
+      - name: Install native GUI system libs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libxkbcommon-dev libwayland-dev libgtk-3-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libgl1-mesa-dev
+
+      - name: Run unit tests
+        working-directory: socratic-chat
+        run: cargo test -- --skip test_live_llama_cpp_roundtrip
+
+      - name: Check release build
+        working-directory: socratic-chat
+        run: cargo check --release
+
+  python-training-scripts:
+    name: Python training scripts check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Syntax & prompt helper checks
+        run: |
+          python3 -m py_compile prompts.py prepare_dataset.py train.py export_gguf.py
+          python3 -c '
+          import prompts
+          assert prompts.strip_think("<think>a</think>ok") == "ok"
+          assert prompts.strip_think("prefill\n</think>\nok") == "ok"
+          chat = prompts.inject_reference([{"role": "user", "content": "hi"}], "hello", mode="CHAT")
+          assert chat[0]["content"] == prompts.CHAT_TWIST_SYSTEM and "no quiz" in chat[-1]["content"]
+          tutor = prompts.inject_reference([{"role": "user", "content": "why?"}], "because", mode="TUTOR")
+          assert tutor[0]["content"] == prompts.TUTOR_TWIST_SYSTEM and "Socratic question" in tutor[-1]["content"]
+          print("Python checks passed.")
+          '

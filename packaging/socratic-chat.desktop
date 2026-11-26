@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Socratic Chat
+Comment=Local 0.8B Socratic tutor and conversational desktop app
+Exec=socratic-chat
+Icon=socratic-chat
+Categories=Utility;Education;
+Terminal=false
