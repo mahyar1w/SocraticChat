@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Socratic Chat</title>
+<style>
+  :root {
+    --canvas: #151412;
+    --sidebar: #1c1a17;
+    --surface: #23201c;
+    --surface-subtle: #1f1d19;
+    --border: #322e28;
+    --border-strong: #4a443b;
+    --ink: #ede9e0;
+    --muted: #9e978c;
+    --accent: #b95329;
+    --accent-tint: #33231b;
+    --user-bg: #2c2822;
+    --user-ink: #f2eee6;
+    --user-border: #443e35;
+    --ok: #4ca873;
+    --warn: #d99b38;
+    --err-bg: #2d1917;
+    --err-fg: #f3a69b;
+    --err-border: #7a3229;
+  }
+  [data-theme="light"] {
+    --canvas: #f7f5f0;
+    --sidebar: #efece4;
+    --surface: #ffffff;
+    --surface-subtle: #f2efe8;
+    --border: #ddd7cb;
+    --border-strong: #c4bcad;
+    --ink: #1f1d1a;
+    --muted: #635d53;
+    --accent: #ad4e27;
+    --accent-tint: #f6e9e2;
+    --user-bg: #26231f;
+    --user-ink: #faf8f4;
+    --user-border: #26231f;
+    --ok: #2e7d4f;
+    --warn: #b4690e;
+    --err-bg: #fdf2f0;
+    --err-fg: #a62c1e;
+    --err-border: #e5a89e;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--canvas); color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  body { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 12px 14px; background: var(--sidebar); border-bottom: 1px solid var(--border);
+  }
+  .header-left, .header-right { display: flex; align-items: center; gap: 8px; }
+  .brand { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted);
+    padding: 4px 9px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; }
+  .dot.ready { background: var(--ok); }
+  .dot.error { background: var(--err-fg); }
+  button {
+    font: inherit; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; min-height: 38px; cursor: pointer;
+  }
+  button.primary {
+    background: var(--accent); color: #fff; border-color: transparent; font-weight: 600;
+  }
+  button:disabled { opacity: 0.45; }
+  main {
+    flex: 1; overflow-y: auto; padding: 16px 14px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .col { width: 100%; max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  .banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 12px; border-radius: 10px;
+    background: var(--err-bg); color: var(--err-fg); border: 1px solid var(--err-border);
+    font-size: 13.5px;
+  }
+  .banner-actions { display: flex; gap: 6px; flex: none; }
+  .banner button { min-height: 30px; padding: 4px 10px; font-size: 12px; }
+  .empty { padding: 24px 0; }
+  .empty h1 { margin: 0 0 6px; font-size: 22px; line-height: 1.25; }
+  .empty p { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+  .starters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .starter {
+    text-align: left; padding: 12px; border-radius: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .starter .tag { font-size: 11.5px; font-weight: 650; color: var(--accent); }
+  .starter .txt { font-size: 13.5px; color: var(--ink); line-height: 1.35; }
+  .msg-user {
+    align-self: flex-end; max-width: 84%;
+    background: var(--user-bg); color: var(--user-ink); border: 1px solid var(--user-border);
+    padding: 11px 14px; border-radius: 14px; white-space: pre-wrap; word-break: break-word;
+  }
+  .msg-assistant {
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 12px 14px; border-radius: 14px;
+  }
+  .msg-head {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;
+  }
+  .role-tag { font-size: 12px; font-weight: 650; color: var(--accent); }
+  .copy-btn {
+    border: none; background: transparent; color: var(--muted);
+    font-size: 12px; min-height: 28px; padding: 2px 6px;
+  }
+  .copy-btn.copied { color: var(--ok); }
+  .msg-body { white-space: pre-wrap; word-break: break-word; }
+  .thinking {
+    align-self: flex-start; padding: 10px 14px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--muted); font-size: 13.5px;
+  }
+  .composer-wrap {
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: var(--canvas); border-top: 1px solid var(--border);
+  }
+  .composer {
+    max-width: 680px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end;
+    background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: 12px; padding: 8px 10px;
+  }
+  textarea {
+    flex: 1; resize: none; border: none; outline: none; background: transparent;
+    color: var(--ink); font: inherit; min-height: 38px; max-height: 120px; padding: 6px 2px;
+  }
+  .drawer-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; z-index: 20;
+  }
+  .drawer-backdrop.open { display: block; }
+  .drawer {
+    position: fixed; top: 0; bottom: 0; left: 0; width: min(82vw, 300px);
+    background: var(--sidebar); border-right: 1px solid var(--border);
+    padding: 14px; display: flex; flex-direction: column; gap: 10px;
+    transform: translateX(-100%); transition: transform 180ms ease; z-index: 30;
+  }
+  .drawer.open { transform: translateX(0); }
+  .conv-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  .conv-row {
+    display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid transparent;
+  }
+  .conv-row.active { background: var(--surface); border-color: var(--border); }
+  .conv-title {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 14px; color: var(--ink);
+  }
+  .conv-del { border: none; background: transparent; color: var(--muted); min-height: 30px; padding: 2px 8px; }
+  .sheet {
+    position: fixed; inset: 0; background: var(--canvas); z-index: 40;
+    display: none; flex-direction: column; padding: 14px; overflow-y: auto; gap: 12px;
+  }
+  .sheet.open { display: flex; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 12.5px; color: var(--muted); }
+  .field input[type="text"], .field input[type="password"] {
+    font: inherit; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+  }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .check-row { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  .seg {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    background: var(--surface-subtle); border: 1px solid var(--border);
+    border-radius: 10px; padding: 4px;
+  }
+  .seg button {
+    border: 1px solid transparent; background: transparent; color: var(--muted);
+    border-radius: 7px; font-weight: 550; min-height: 36px;
+  }
+  .seg button.active {
+    background: var(--surface); color: var(--ink); border-color: var(--border-strong); font-weight: 650;
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <button id="menuBtn" aria-label="Conversations">Chats</button>
+    <span class="brand">Socratic</span>
+  </div>
+  <div class="header-right">
+    <span class="status-pill" id="statusPill" style="cursor:pointer"><span id="statusDot" class="dot"></span><span id="statusText">Loading…</span></span>
+    <button id="settingsBtn">Settings</button>
+  </div>
+</header>
+
+<main id="chatScroll"><div class="col" id="chatCol"></div></main>
+
+<div class="composer-wrap">
+  <div class="composer">
+    <textarea id="input" rows="1" placeholder="Ask a question or chat…"></textarea>
+    <button id="sendBtn" class="primary" disabled>Send</button>
+  </div>
+</div>
+
+<div class="drawer-backdrop" id="backdrop"></div>
+<aside class="drawer" id="drawer">
+  <div class="row">
+    <strong style="font-size:16px">Conversations</strong>
+    <button id="newChatBtn" class="primary">+ New</button>
+  </div>
+  <div class="conv-list" id="convList"></div>
+  <div class="row">
+    <button id="themeBtn" style="flex:1">Light Mode</button>
+    <button id="closeDrawerBtn">Close</button>
+  </div>
+</aside>
+
+<section class="sheet" id="settingsSheet">
+  <div class="row">
+    <strong style="font-size:18px">Settings</strong>
+    <div style="display:flex;gap:8px">
+      <button id="reloadBtn">Reload Engine</button>
+      <button id="closeSettingsBtn" class="primary">Done</button>
+    </div>
+  </div>
+  <div class="field">
+    <label>Local GGUF Model</label>
+    <input id="ggufPath" type="text" placeholder="Import Qwen3.5-0.8B-Socratic-Q8_0.gguf">
+    <button id="importModelBtn" class="primary">Import GGUF Model from Phone</button>
+  </div>
+  <div class="field">
+    <label>Compute Backend</label>
+    <div class="seg" role="radiogroup" aria-label="Compute Backend">
+      <button type="button" id="gpuModeBtn">GPU (Vulkan)</button>
+      <button type="button" id="cpuModeBtn">CPU Only</button>
+    </div>
+  </div>
+  <label class="check-row">
+    <input id="useTeacher" type="checkbox">
+    <span>Two-Step Teacher (query a larger model first)</span>
+  </label>
+  <div id="teacherFields" style="display:none;flex-direction:column;gap:10px">
+    <div class="field">
+      <label>Teacher URL</label>
+      <input id="teacherUrl" type="text" placeholder="https://api.openai.com/v1">
+    </div>
+    <div class="field">
+      <label>Teacher Model</label>
+      <input id="teacherModel" type="text" placeholder="gpt-4o-mini or qwen3:8b">
+    </div>
+    <div class="field">
+      <label>Teacher API Key (memory only, never saved)</label>
+      <input id="teacherKey" type="password" placeholder="Optional">
+    </div>
+  </div>
+</section>
+
+<script>
+const STARTERS = [
+  ["Casual chat", "Hey! How's your day going?"],
+  ["Socratic CS", "Why is binary search O(log n) instead of O(n)?"],
+  ["Recommendations", "Recommend 2 chill rainy-night movies"],
+  ["Socratic Science", "Why does ice float on water?"],
+];
+
+let state = JSON.parse(AndroidBridge.loadState());
+if (typeof state.config.useGpu !== "boolean") state.config.useGpu = true;
+let engineStatus = "starting";
+let activeBackend = state.config.useGpu ? "GPU" : "CPU";
+let formUseGpu = state.config.useGpu;
+let errorBanner = null;
+let busyConvId = null;
+let copiedIdx = -1;
+
+const chatScroll = document.getElementById("chatScroll");
+const chatCol = document.getElementById("chatCol");
+const inputEl = document.getElementById("input");
+const sendBtn = document.getElementById("sendBtn");
+const statusDot = document.getElementById("statusDot");
+const statusText = document.getElementById("statusText");
+const drawer = document.getElementById("drawer");
+const backdrop = document.getElementById("backdrop");
+const settingsSheet = document.getElementById("settingsSheet");
+
+function activeConv() {
+  return state.conversations.find((c) => c.id === state.activeId) || state.conversations[0];
+}
+function persist() { AndroidBridge.saveState(JSON.stringify(state)); }
+function applyTheme() {
+  document.documentElement.dataset.theme = state.config.darkMode ? "dark" : "light";
+  document.getElementById("themeBtn").textContent = state.config.darkMode ? "Light Mode" : "Dark Mode";
+}
+function updateSendState() {
+  const canSend = engineStatus === "ready" && busyConvId === null && inputEl.value.trim().length > 0;
+  sendBtn.disabled = !canSend;
+  sendBtn.textContent = busyConvId !== null ? "…" : "Send";
+}
+function renderDrawer() {
+  const list = document.getElementById("convList");
+  list.replaceChildren();
+  for (const c of state.conversations) {
+    const row = document.createElement("div");
+    row.className = "conv-row" + (c.id === state.activeId ? " active" : "");
+    const title = document.createElement("div");
+    title.className = "conv-title";
+    title.textContent = c.title;
+    title.onclick = () => { state.activeId = c.id; errorBanner = null; persist(); closeDrawer(); render(); };
+    const del = document.createElement("button");
+    del.className = "conv-del";
+    del.textContent = "×";
+    del.onclick = () => {
+      state.conversations = state.conversations.filter((x) => x.id !== c.id);
+      if (!state.conversations.length) {
+        const id = state.nextId++;
+        state.conversations.push({ id, title: "New Chat", messages: [] });
+        state.activeId = id;
+      } else if (state.activeId === c.id) {
+        state.activeId = state.conversations[0].id;
+      }
+      persist(); renderDrawer(); render();
+    };
+    row.append(title, del);
+    list.append(row);
+  }
+}
+function render() {
+  applyTheme();
+  updateSendState();
+  chatCol.replaceChildren();
+  if (errorBanner) {
+    const b = document.createElement("div");
+    b.className = "banner";
+    const span = document.createElement("span");
+    span.textContent = errorBanner;
+    const acts = document.createElement("div");
+    acts.className = "banner-actions";
+    if (engineStatus === "missing_model" || engineStatus === "error") {
+      const sBtn = document.createElement("button");
+      sBtn.textContent = "Settings";
+      sBtn.onclick = openSettings;
+      acts.append(sBtn);
+    }
+    const dBtn = document.createElement("button");
+    dBtn.textContent = "Dismiss";
+    dBtn.onclick = () => { errorBanner = null; render(); };
+    acts.append(dBtn);
+    b.append(span, acts);
+    chatCol.append(b);
+  }
+
+  const conv = activeConv();
+  const activeBusy = busyConvId === conv.id;
+  if (!conv.messages.length && !activeBusy) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.innerHTML = "<h1>What would you like to explore?</h1><p>Chat naturally on everyday topics, or work through math, code, and science step by step.</p>";
+    const grid = document.createElement("div");
+    grid.className = "starters";
+    for (const [tag, prompt] of STARTERS) {
+      const btn = document.createElement("button");
+      btn.className = "starter";
+      btn.innerHTML = `<span class="tag"></span><span class="txt"></span>`;
+      btn.querySelector(".tag").textContent = tag;
+      btn.querySelector(".txt").textContent = prompt;
+      btn.onclick = () => sendPrompt(prompt);
+      grid.append(btn);
+    }
+    empty.append(grid);
+    chatCol.append(empty);
+    return;
+  }
+
+  conv.messages.forEach((m, idx) => {
+    if (m.role === "user") {
+      const div = document.createElement("div");
+      div.className = "msg-user";
+      div.textContent = m.content;
+      chatCol.append(div);
+    } else {
+      const box = document.createElement("div");
+      box.className = "msg-assistant";
+      const head = document.createElement("div");
+      head.className = "msg-head";
+      const tag = document.createElement("span");
+      tag.className = "role-tag";
+      tag.textContent = "Socratic";
+      const copy = document.createElement("button");
+      copy.className = "copy-btn" + (copiedIdx === idx ? " copied" : "");
+      copy.textContent = copiedIdx === idx ? "Copied" : "Copy";
+      copy.onclick = () => {
+        AndroidBridge.copyText(m.content);
+        copiedIdx = idx;
+        render();
+        setTimeout(() => { if (copiedIdx === idx) { copiedIdx = -1; render(); } }, 1500);
+      };
+      head.append(tag, copy);
+      const body = document.createElement("div");
+      body.className = "msg-body";
+      body.textContent = m.content;
+      box.append(head, body);
+      chatCol.append(box);
+    }
+  });
+
+  if (activeBusy) {
+    const t = document.createElement("div");
+    t.className = "thinking";
+    t.textContent = "Thinking…";
+    chatCol.append(t);
+  }
+  chatScroll.scrollTop = chatScroll.scrollHeight;
+}
+
+function sendPrompt(text) {
+  const clean = text.trim();
+  if (!clean || busyConvId !== null) return;
+  if (engineStatus !== "ready") {
+    errorBanner = "Local engine is not ready yet. Open Settings to import your GGUF model.";
+    render();
+    return;
+  }
+  const conv = activeConv();
+  if (!conv.messages.length) {
+    conv.title = clean.length > 32 ? clean.slice(0, 32) + "…" : clean;
+  }
+  conv.messages.push({ role: "user", content: clean });
+  errorBanner = null;
+  busyConvId = conv.id;
+  persist();
+  render();
+  AndroidBridge.sendPrompt(conv.id, JSON.stringify(conv.messages), JSON.stringify(state.config));
+}
+
+window.onNativeEvent = (raw) => {
+  const evt = JSON.parse(raw);
+  if (evt.type === "engine") {
+    engineStatus = evt.payload.status;
+    if (evt.payload.backend) activeBackend = evt.payload.backend;
+    statusDot.className = "dot" + (engineStatus === "ready" ? " ready" : engineStatus === "starting" ? "" : " error");
+    statusText.textContent = engineStatus === "ready"
+      ? `Ready · ${activeBackend}`
+      : engineStatus === "starting"
+      ? `Loading ${activeBackend}…`
+      : "Setup";
+    if (evt.payload.modelPath) {
+      state.config.ggufPath = evt.payload.modelPath;
+      document.getElementById("ggufPath").value = evt.payload.modelPath;
+      persist();
+    }
+    if (engineStatus === "error" || engineStatus === "missing_model") {
+      errorBanner = evt.payload.detail;
+    } else if (engineStatus === "ready") {
+      errorBanner = null;
+    }
+    render();
+  } else if (evt.type === "model_imported") {
+    state.config.ggufPath = evt.payload.path;
+    document.getElementById("ggufPath").value = evt.payload.path;
+    persist();
+  } else if (evt.type === "reply") {
+    const conv = state.conversations.find((c) => c.id === evt.payload.convId);
+    busyConvId = null;
+    if (evt.payload.ok && conv) {
+      conv.messages.push({ role: "assistant", content: evt.payload.text });
+    } else {
+      if (conv && conv.messages.length && conv.messages[conv.messages.length - 1].role === "user") {
+        conv.messages.pop();
+      }
+      errorBanner = evt.payload.error || "Request failed";
+    }
+    persist();
+    render();
+  }
+};
+
+function openDrawer() { renderDrawer(); drawer.classList.add("open"); backdrop.classList.add("open"); }
+function closeDrawer() { drawer.classList.remove("open"); backdrop.classList.remove("open"); }
+function syncBackendButtons() {
+  document.getElementById("gpuModeBtn").className = formUseGpu ? "active" : "";
+  document.getElementById("cpuModeBtn").className = !formUseGpu ? "active" : "";
+}
+function openSettings() {
+  document.getElementById("ggufPath").value = state.config.ggufPath || "";
+  formUseGpu = !!state.config.useGpu;
+  syncBackendButtons();
+  document.getElementById("useTeacher").checked = !!state.config.useTeacher;
+  document.getElementById("teacherUrl").value = state.config.teacherUrl || "";
+  document.getElementById("teacherModel").value = state.config.teacherModel || "";
+  document.getElementById("teacherFields").style.display = state.config.useTeacher ? "flex" : "none";
+  settingsSheet.classList.add("open");
+}
+function saveSettingsFromForm() {
+  const prevPath = state.config.ggufPath || "";
+  const prevGpu = !!state.config.useGpu;
+  state.config.ggufPath = document.getElementById("ggufPath").value.trim();
+  state.config.useGpu = formUseGpu;
+  state.config.useTeacher = document.getElementById("useTeacher").checked;
+  state.config.teacherUrl = document.getElementById("teacherUrl").value.trim();
+  state.config.teacherModel = document.getElementById("teacherModel").value.trim();
+  AndroidBridge.setTeacherKey(document.getElementById("teacherKey").value.trim());
+  persist();
+  return prevPath !== state.config.ggufPath || prevGpu !== state.config.useGpu;
+}
+
+document.getElementById("menuBtn").onclick = openDrawer;
+document.getElementById("closeDrawerBtn").onclick = closeDrawer;
+backdrop.onclick = closeDrawer;
+document.getElementById("newChatBtn").onclick = () => {
+  const id = state.nextId++;
+  state.conversations.unshift({ id, title: "New Chat", messages: [] });
+  state.activeId = id;
+  errorBanner = null;
+  persist(); closeDrawer(); render();
+};
+document.getElementById("themeBtn").onclick = () => {
+  state.config.darkMode = !state.config.darkMode;
+  persist(); render();
+};
+document.getElementById("settingsBtn").onclick = openSettings;
+document.getElementById("statusPill").onclick = openSettings;
+document.getElementById("gpuModeBtn").onclick = () => { formUseGpu = true; syncBackendButtons(); };
+document.getElementById("cpuModeBtn").onclick = () => { formUseGpu = false; syncBackendButtons(); };
+document.getElementById("useTeacher").onchange = (e) => {
+  document.getElementById("teacherFields").style.display = e.target.checked ? "flex" : "none";
+};
+document.getElementById("importModelBtn").onclick = () => AndroidBridge.pickModel();
+document.getElementById("reloadBtn").onclick = () => {
+  saveSettingsFromForm();
+  settingsSheet.classList.remove("open");
+  AndroidBridge.startEngine(state.config.ggufPath || "", !!state.config.useGpu);
+};
+document.getElementById("closeSettingsBtn").onclick = () => {
+  const engineChanged = saveSettingsFromForm();
+  settingsSheet.classList.remove("open");
+  if (engineChanged) {
+    AndroidBridge.startEngine(state.config.ggufPath || "", !!state.config.useGpu);
+  }
+};
+
+inputEl.addEventListener("input", updateSendState);
+sendBtn.onclick = () => {
+  if (sendBtn.disabled) return;
+  const text = inputEl.value;
+  inputEl.value = "";
+  sendPrompt(text);
+};
+
+render();
+AndroidBridge.startEngine(state.config.ggufPath || "", !!state.config.useGpu);
+</script>
+</body>
+</html>
