@@ -87,7 +87,7 @@ jobs:
           curl -fSL -o appimagetool.AppImage \
             https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool.AppImage
-          ARCH=x86_64 ./appimagetool.AppImage --appimage-extract-and-run --comp gzip \
+          ARCH=x86_64 ./appimagetool.AppImage --appimage-extract-and-run \
             SocraticChat.AppDir SocraticChat-x86_64.AppImage
           ls -lh SocraticChat-x86_64.AppImage
 
